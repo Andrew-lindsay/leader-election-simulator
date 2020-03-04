@@ -1,5 +1,6 @@
 import java.util.*;
 import java.io.*;
+import java.util.concurrent.Semaphore;
 
 /* Class to represent a node. Each node must run on its own thread.*/
 
@@ -12,12 +13,23 @@ public class Node extends Thread {
 	// private Node next;
     private int startedNum = 0;
 
+    private Semaphore nodesSemaphore = null;
+    private Semaphore netSemaphore = null;
+
 	// Neighbouring nodes
 	public List<Node> myNeighbours;
 
 	// Queues for the incoming messages
 	public List<String> incomingMsg;
-	
+
+	public void setNetSemaphore(Semaphore netSemaphore) {
+		this.netSemaphore = netSemaphore;
+	}
+
+	public void setNodesSemaphore(Semaphore nodesSemaphore) {
+		this.nodesSemaphore = nodesSemaphore;
+	}
+
 	public Node(int id, Network network){
 	
 		this.id = id;
@@ -28,6 +40,11 @@ public class Node extends Thread {
 	}
 	
 	// Basic methods for the Node class
+
+	public void startElection(){
+
+	}
+
 	
 	public int getNodeId() {
 		/*
@@ -98,14 +115,30 @@ public class Node extends Thread {
 			// logic for handling incoming messages
 			// could get multiple messages from diff neighbour nodes can only send one tho ?
 			// if you get multiple messages wait until next round to handle them
-
-			System.out.println("Started thread: " + id + " for " + startedNum + " time");
-			startedNum++;
 			try {
-				wait();
+				nodesSemaphore.acquire();
 			}catch (InterruptedException e){
+				System.out.println("Accquire failed");
 				e.printStackTrace();
 			}
+
+			// process messaged
+
+			// send messages
+
+			// network.addMessage(id,"THREAD: " + id);
+
+			try {
+				Thread.sleep(200);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+
+
+			System.out.println("Handle Messages thread:  " + id + " for " + startedNum + " time");
+			startedNum++;
+
+			netSemaphore.release();
 		}
     }
 

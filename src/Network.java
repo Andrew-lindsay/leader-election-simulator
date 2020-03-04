@@ -1,6 +1,8 @@
 import java.lang.reflect.Array;
 import java.util.*;
 import java.io.*;
+import java.util.concurrent.Semaphore;
+
 
 /* 
 Class to simulate the network. System design directions:
@@ -17,6 +19,9 @@ public class Network {
 	private static List<Node> nodes;
 	private static HashMap<Integer, Node> node_map;
 	private static List<Node> ring;
+    private Semaphore netSemaphore;
+    private Semaphore nodesSemaphore;
+
 
 	private int round;
 	private int period = 20;
@@ -48,7 +53,7 @@ public class Network {
             int node_id = Integer.parseInt(node_line[0]);
             Node n;
 
-//            System.out.println(node_id);
+            //System.out.println(node_id);
 
             // if not already seen node create node and add to map
             n = getNodeInMap(node_id);
@@ -70,8 +75,21 @@ public class Network {
                     n.addNeighbour(prev);
                 }
             }
+
             // set previous to be current
             prev = n;
+        }
+
+        // semaphore for number waiting for all threads to send
+        netSemaphore = new Semaphore(1-ring.size());
+
+        // nodes go first
+        nodesSemaphore = new Semaphore(ring.size());
+
+        // setSemaphore for nodes
+        for(Node x : ring){
+            x.setNodesSemaphore(nodesSemaphore);
+            x.setNetSemaphore(netSemaphore);
         }
 
         printGraph();
@@ -109,31 +127,97 @@ public class Network {
 
 	public void NetSimulator()  throws IOException, InterruptedException {
         msgToDeliver = new HashMap<Integer, String>();
+        round = 0;
+
+        // read data into these from file
+        String elect_fail = "";
+        int elect_round = -1;
+        ArrayList<Integer> elect_nodes = new ArrayList<Integer>();
+
 
         /*
         Code to call methods for parsing the input file, initiating the system and producing the log can be added here.
         */
 
         // start all nodes
+        for(Node node : ring){
+            node.start();
+        }
 
         // get first elect message
         Scanner sc = new Scanner(f_elect_fail);
+        String[] line_elect = sc.nextLine().split(" ");
 
-        round = 0;
-        while(round != 5) {
+        if(line_elect.length < 3){
+            System.out.println("ERROR: malformed ELECT line");
+        }
 
-            // wait until all threads send messages semaphore 0
+        // change later to saving the type to variable
+
+        elect_fail = line_elect[0];
+        elect_round = Integer.parseInt(line_elect[1]);
+        for(int i = 2; i < line_elect.length; i++){
+            elect_nodes.add( Integer.parseInt(line_elect[i]));
+        }
+
+
+        while(true) {
+            // wait until all threads send messages
+            netSemaphore.acquire();
+            System.out.println("Round over all messages received now sending messages");
 
             // parse elect file here
-            for(Node node : ring){
-                node.start();
-            }
 
             // check at start of new round if anything needs to be elected
+            if(round == elect_round){
+                // initialise election for a nodes
+
+                if(elect_fail.equals("ELECT")){
+
+                    for(int node_id : elect_nodes){
+                        Node n = node_map.get(node_id);
+                        n.startElection();
+                    }
+                    // clear nodes
+                    elect_nodes.clear();
+
+                }else if(elect_fail.equals("FAIL")){
+                    // fuck this shit
+                }
+
+                if(sc.hasNextLine()){
+                    // parse next line
+                    line_elect = sc.nextLine().split(" ");
+                    elect_fail = line_elect[0];
+                    elect_round = Integer.parseInt(line_elect[1]);
+
+                    for(int i = 2; i < line_elect.length; i++){
+                        elect_nodes.add( Integer.parseInt(line_elect[i]));
+                    }
+
+                }else{
+                    // if no next line and no messages to send then terminate as file has finished
+                    // check messages
+                    if(msgToDeliver.isEmpty()){
+                        break;
+                    }
+                }
+            }
 
             // rounds proceed here
+            Thread.sleep(10000);
+
+            //deliver messages
+            // TODO: complete deliver messages
+            deliverMessages();
+
+            // Start of new round
             round++;
+            // release after delivering messages,
+            nodesSemaphore.release(ring.size());
         }
+
+        //break wait for all messages to be delivered
     }
    		
    	private void parseFile(String fileName) throws IOException {
@@ -151,7 +235,9 @@ public class Network {
 		*/
 
 
+		//
 
+        msgToDeliver.put(id,m);
 	}
 	
 	public synchronized void deliverMessages() {
@@ -200,11 +286,4 @@ public class Network {
          net.NetSimulator();
 
     }
-	
-	
-	
-	
-	
-	
-	
 }
