@@ -62,7 +62,7 @@ public class Node extends Thread {
 		/*
 		Method to return true if the node is currently a leader
 		*/
-		return false;
+		return leader;
 	}
 
 	public List<Node> getNeighbors() {
@@ -119,7 +119,7 @@ public class Node extends Thread {
         }
 
         String msg  = incomingMsg.remove(0); // inefficient use queue
-        System.out.println(msg);
+        //System.out.println(msg);
 
         // parse msg
         String msg_elems[] = msg.split(" ");
@@ -157,7 +157,7 @@ public class Node extends Thread {
                 this.leader_node = id;
                 participant = false;
                 // forward leader message
-                sendMsg("LEADER" + leader_node_id);
+                sendMsg("LEADER " + leader_node_id);
             }
         }else if(msg_type.equals("FORWARD")){
             int msg_node_id = Integer.parseInt(msg_elems[1]);
@@ -172,7 +172,7 @@ public class Node extends Thread {
                 participant = false; // stop participating as now leader this might not be wanted
                 sendMsg("LEADER " + this.id);
                 // leader elected
-                System.out.println("Node " + " elected Leader Round: " + startedNum);
+                System.out.println("Node " + this.id + " elected Leader Round: " + startedNum);
             }else{
                 // do nothing
                 // if other message in queue process it
@@ -190,34 +190,35 @@ public class Node extends Thread {
     @Override
     public void run(){
 
-        // if no message proceed to latch straight away
-		while(true) {
-			// logic for handling incoming messages
-			// could get multiple messages from diff neighbour nodes can only send one tho ?
-			// if you get multiple messages wait until next round to handle them
-			try {
-				nodesSemaphore.acquire();
-			}catch (InterruptedException e){
-				System.out.println("Accquire failed");
-				e.printStackTrace();
-			}
+	    try {
+            // if no message proceed to latch straight away
+            while (true) {
+                // logic for handling incoming messages
+                // could get multiple messages from diff neighbour nodes can only send one tho ?
+                // if you get multiple messages wait until next round to handle them
 
-			// process messaged
-            processMsg();
+                nodesSemaphore.acquire();
 
-			//network.addMessage(id,"THREAD: " + id);
+                // process messaged
+                processMsg();
 
-			try {
-				Thread.sleep(200);
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
+                //network.addMessage(id,"THREAD: " + id);
 
-            System.out.println("Handle Messages thread:  " + id + " for " + startedNum + " time");
-            startedNum++;
+                try {
+                    Thread.sleep(200);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
 
-			netSemaphore.release();
-		}
+                //System.out.println("Messages sent for thread:  " + id + " for round " + startedNum);
+                startedNum++;
+
+                netSemaphore.release();
+            }
+        }catch (InterruptedException e){
+            System.out.println("Thread "  + this.id +  " interrupted by Main Thread");
+        }
+
     }
 
 }

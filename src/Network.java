@@ -27,6 +27,7 @@ public class Network {
 	private int period = 20;
 	private Map<Integer, String> msgToDeliver; // Integer for the id of the sender and String for the message
     private File f_elect_fail;
+    boolean elect_file_finished = false;
 
 
     Network(String graph, String elect) throws IOException{
@@ -164,12 +165,12 @@ public class Network {
         while(true) {
             // wait until all threads send messages
             netSemaphore.acquire(ring.size());
-            System.out.println("Round over " + round + " all messages received now sending messages");
+            // System.out.println("Round " + round + " all messages received now sending messages");
 
             // parse elect file here
 
             // check at start of new round if anything needs to be elected
-            if(round == elect_round){
+            if(round == (elect_round-1)){
                 // initialise election for a nodes
 
                 if(elect_fail.equals("ELECT")){
@@ -177,7 +178,7 @@ public class Network {
                     for(int node_id : elect_nodes){
                         Node n = node_map.get(node_id);
                         n.startElection();
-                        System.out.println("Initiation of election; Round:" + elect_round + " Node: " + node_id);
+                        System.out.println("Initiation of election; Round: " + elect_round + " Node: " + node_id);
                     }
 
                     // clear nodes
@@ -200,14 +201,17 @@ public class Network {
                 }else{
                     // if no next line and no messages to send then terminate as file has finished
                     // check messages
-                    if(msgToDeliver.isEmpty()){
-                        break;
-                    }
+                    elect_file_finished = true;
+                    sc.close();
                 }
             }
 
+            if(msgToDeliver.isEmpty() && elect_file_finished == true){
+                break;
+            }
+
             // rounds proceed here
-            Thread.sleep(3000);
+            Thread.sleep(1000);
 
             //deliver messages
             // TODO: complete deliver messages
@@ -221,14 +225,18 @@ public class Network {
         }
 
         //break wait for all messages to be delivered
-         System.out.println("Main thread terminated");
+        System.out.println("Main thread terminated");
+
+        for (Node n : ring){
+            n.interrupt();
+        }
+
     }
    		
    	private void parseFile(String fileName) throws IOException {
    		/*
    		Code to parse the file can be added here. Notice that the method's descriptor must be defined.
    		*/
-
 
 	}
 	
@@ -255,8 +263,10 @@ public class Network {
             // enforces sending only to neighbour
 
 
+        //ArrayList<Integer> removeList = new ArrayList<Integer>(); // if needed
+
         // only receive one message per node
-        for( int node_id : msgToDeliver.keySet() ){
+        for( int node_id : msgToDeliver.keySet()){
             // get node sending message
             Node sending_n = node_map.get(node_id);
 
@@ -267,10 +277,11 @@ public class Network {
             Node receiving_node = ring.get( (sending_node_index + 1) % ring.size() );
 
             // send message to neighbour, add to incomingMsg
-            String msg_str = msgToDeliver.remove(node_id); // remove message
+            String msg_str = msgToDeliver.get(node_id);
             System.out.println("Round " +  round + ": Message from Node " + node_id + " to " + " Node " + receiving_node.getNodeId() + " contents: " + msg_str);
             receiving_node.receiveMsg(msg_str);
         }
+        msgToDeliver.clear(); // clear list of messages after sending them
 	}
 		
 	public synchronized void informNodeFailure(int id) {
