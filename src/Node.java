@@ -12,6 +12,7 @@ public class Node extends Thread {
 	private boolean participant = false;
 	private boolean leader = false;
 	private Network network;
+
 	// private Node next;
     private int startedNum = 0;
     private int leader_node = 0;
@@ -134,8 +135,10 @@ public class Node extends Thread {
             int msg_node_id = Integer.parseInt(msg_elems[1]);
             String send_msg_str = String.format("FORWARD %d", max(id, msg_node_id));
             if(participant == false){
+                participant = true;
                 sendMsg(send_msg_str);
             }else if(participant == true && msg_node_id > id ){
+                participant = true;
                 sendMsg(send_msg_str);
             }else if(msg_node_id == id){
                 // this really cannot happen as election message turns into forward message?
@@ -150,7 +153,6 @@ public class Node extends Thread {
                 // if another message in queue process it could result in sending a message
                     // case when ELECT is in queue
             }
-            participant = true;
         }else if(msg_type.equals("LEADER")){
             int leader_node_id = Integer.parseInt(msg_elems[1]);
             if(!isNodeLeader()) {
@@ -163,6 +165,7 @@ public class Node extends Thread {
             int msg_node_id = Integer.parseInt(msg_elems[1]);
             String send_msg_str = String.format("FORWARD %d", max(id, msg_node_id));
             if(participant == false){
+                participant = true;
                 sendMsg(send_msg_str);
             }else if(participant == true && id < msg_node_id){
                 sendMsg(send_msg_str);
@@ -175,7 +178,7 @@ public class Node extends Thread {
                 System.out.println("Node " + this.id + " elected Leader Round: " + startedNum);
             }else{
                 // do nothing
-                // if other message in queue process it
+                // if other message in queue process it ?
             }
 
         }else if(msg_type.equals("START_ELECT")){

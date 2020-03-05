@@ -28,6 +28,7 @@ public class Network {
 	private Map<Integer, String> msgToDeliver; // Integer for the id of the sender and String for the message
     private File f_elect_fail;
     boolean elect_file_finished = false;
+    boolean elect_just_called = false;
 
 
     Network(String graph, String elect) throws IOException{
@@ -148,7 +149,8 @@ public class Network {
 
         // get first elect message
         Scanner sc = new Scanner(f_elect_fail);
-        String[] line_elect = sc.nextLine().split(" ");
+        String next_line = sc.nextLine();
+        String[] line_elect = next_line.split(" ");
 
         if(line_elect.length < 3){
             System.out.println("ERROR: malformed ELECT line");
@@ -178,6 +180,7 @@ public class Network {
                     for(int node_id : elect_nodes){
                         Node n = node_map.get(node_id);
                         n.startElection();
+                        elect_just_called = true;
                         System.out.println("Initiation of election; Round: " + elect_round + " Node: " + node_id);
                     }
 
@@ -188,14 +191,21 @@ public class Network {
                     // see what happens
                 }
 
-                if(sc.hasNextLine()){
+                // check line is not blank see if has next
+                if(sc.hasNextLine() && !(next_line = sc.nextLine()).isEmpty()){
                     // parse next line
-                    line_elect = sc.nextLine().split(" ");
+                    // check if line is empty
+                    line_elect = next_line.split(" ");
+
+                    if (line_elect.length < 3) {
+                        System.out.println("ERROR: malformed ELECT line: " + next_line);
+                    }
+
                     elect_fail = line_elect[0];
                     elect_round = Integer.parseInt(line_elect[1]);
 
-                    for(int i = 2; i < line_elect.length; i++){
-                        elect_nodes.add( Integer.parseInt(line_elect[i]));
+                    for (int i = 2; i < line_elect.length; i++) {
+                        elect_nodes.add(Integer.parseInt(line_elect[i]));
                     }
 
                 }else{
@@ -204,9 +214,12 @@ public class Network {
                     elect_file_finished = true;
                     sc.close();
                 }
+
+
             }
 
-            if(msgToDeliver.isEmpty() && elect_file_finished == true){
+            // elect just called stops termination problem with single ELECT message in file placed in
+            if(msgToDeliver.isEmpty() && elect_file_finished == true && (elect_just_called == false)){
                 break;
             }
 
@@ -221,6 +234,7 @@ public class Network {
             // Start of new round
             round++;
             // release after delivering messages,
+            elect_just_called = false; // reset if elect just called
             nodesSemaphore.release(ring.size());
         }
 
@@ -267,6 +281,12 @@ public class Network {
 
         // only receive one message per node
         for( int node_id : msgToDeliver.keySet()){
+
+//            if(node_id == -1){
+//                // election just started so message placed in delivery to stop termination
+//                continue;
+//            }
+
             // get node sending message
             Node sending_n = node_map.get(node_id);
 
@@ -278,7 +298,7 @@ public class Network {
 
             // send message to neighbour, add to incomingMsg
             String msg_str = msgToDeliver.get(node_id);
-            System.out.println("Round " +  round + ": Message from Node " + node_id + " to " + " Node " + receiving_node.getNodeId() + " contents: " + msg_str);
+            System.out.println("Round " +  round + ": Message from Node " + node_id + " to Node " + receiving_node.getNodeId() + " contents: " + msg_str);
             receiving_node.receiveMsg(msg_str);
         }
         msgToDeliver.clear(); // clear list of messages after sending them
