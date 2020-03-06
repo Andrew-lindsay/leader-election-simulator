@@ -8,6 +8,8 @@ import static java.lang.Math.max;
 
 public class Node extends Thread {
 
+	private BufferedWriter outfile_writer;
+
 	private int id;
 	private boolean participant = false;
 	private boolean leader = false;
@@ -35,11 +37,11 @@ public class Node extends Thread {
 		this.nodesSemaphore = nodesSemaphore;
 	}
 
-	public Node(int id, Network network){
-	
+	public Node(int id, Network network, BufferedWriter br){
 		this.id = id;
 		this.network = network; // get network in thread ?
-		
+		this.outfile_writer = br;
+
 		myNeighbours = new ArrayList<Node>();
 		incomingMsg = new ArrayList<String>();
 	}
@@ -174,7 +176,16 @@ public class Node extends Thread {
                 leader_node = id;
                 participant = false; // stop participating as now leader this might not be wanted
                 sendMsg("LEADER " + this.id);
-                // leader elected
+
+                // leader elected write to file
+                synchronized (outfile_writer){
+                    try {
+                        outfile_writer.write("Leader Node " + this.id+ "\n");
+                    }catch (IOException e){
+                        e.printStackTrace();
+                    }
+                }
+
                 System.out.println("Node " + this.id + " elected Leader Round: " + startedNum);
             }else{
                 // do nothing

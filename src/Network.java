@@ -22,13 +22,14 @@ public class Network {
     private Semaphore netSemaphore;
     private Semaphore nodesSemaphore;
 
-
 	private int round;
 	private int period = 20;
 	private Map<Integer, String> msgToDeliver; // Integer for the id of the sender and String for the message
     private File f_elect_fail;
     boolean elect_file_finished = false;
     boolean elect_just_called = false;
+
+    BufferedWriter out_file;
 
 
     Network(String graph, String elect) throws IOException{
@@ -42,6 +43,7 @@ public class Network {
         node_map = new HashMap<Integer, Node>();
         ring = new ArrayList<Node>();
         f_elect_fail = new File(elect);
+        out_file = new BufferedWriter(new FileWriter("log.txt"));
 
         // setup nodes from graph here
         Scanner s_graph = new Scanner(new File(graph));
@@ -82,6 +84,8 @@ public class Network {
             prev = n;
         }
 
+        s_graph.close();
+
         // semaphore for number waiting for all threads to send
         netSemaphore = new Semaphore(0);
 
@@ -94,6 +98,7 @@ public class Network {
             x.setNetSemaphore(netSemaphore);
         }
 
+
         printGraph();
         printRing();
     }
@@ -102,8 +107,8 @@ public class Network {
         String str = "";
         for(Node n : node_map.values()){
             str =  "" + n.getNodeId() + ": ";
-            for(Node neightbour : n.myNeighbours){
-                str += "" + neightbour.getNodeId() + ", ";
+            for(Node neighbour : n.myNeighbours){
+                str += "" + neighbour.getNodeId() + ", ";
             }
             System.out.println(str);
         }
@@ -117,10 +122,11 @@ public class Network {
         System.out.print('\n');
     }
 
+    // creates new node if not in map
     public Node getNodeInMap(int node_id){
         Node n;
         if(!node_map.containsKey(node_id)){
-            n = new Node(node_id, this);
+            n = new Node(node_id, this, out_file);
             node_map.put(node_id, n);
         }else{
             n = node_map.get(node_id);
@@ -189,6 +195,8 @@ public class Network {
 
                 }else if(elect_fail.equals("FAIL")){
                     // see what happens
+
+
                 }
 
                 // check line is not blank see if has next
@@ -214,8 +222,6 @@ public class Network {
                     elect_file_finished = true;
                     sc.close();
                 }
-
-
             }
 
             // elect just called stops termination problem with single ELECT message in file placed in
@@ -245,6 +251,7 @@ public class Network {
             n.interrupt();
         }
 
+        out_file.close();
     }
    		
    	private void parseFile(String fileName) throws IOException {
