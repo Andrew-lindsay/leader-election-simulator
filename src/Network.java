@@ -227,15 +227,15 @@ public class Network {
                         n.myNeighbours.remove(failed_node);
                     }
 
-                    // remove node from ring
-                    ring.remove(failed_node);
-
                     // find new path
                     if( findFullCycle() == false){
                         System.out.println("Network disconnected, can't form ring: EXITING");
                         sc.close();
                         break;
                     }
+
+                    // remove node from ring
+                    ring.remove(failed_node);
 
                     System.out.println("Building new network ring...");
 
