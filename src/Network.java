@@ -1,4 +1,3 @@
-import java.lang.reflect.Array;
 import java.util.*;
 import java.io.*;
 import java.util.concurrent.Semaphore;
@@ -18,7 +17,7 @@ public class Network {
 
 	private static List<Node> nodes;
 	private static HashMap<Integer, Node> node_map;
-	private static List<Node> ring;
+	private static ArrayList<Node> ring;
     private Semaphore netSemaphore;
     private Semaphore nodesSemaphore;
 
@@ -28,6 +27,7 @@ public class Network {
     private File f_elect_fail;
     boolean elect_file_finished = false;
     boolean elect_just_called = false;
+    boolean first_fail = true;
 
     BufferedWriter out_file;
     Node path[];
@@ -75,13 +75,25 @@ public class Network {
             // add previous node to neighbours of current node if not already there
             // implicit in the ring
             if(prev != null){
-                if(!n.isNeighbour(prev)){
+                if(!n.hasNeighbour(prev)){
                     n.addNeighbour(prev);
                 }
             }
 
             // set previous to be current
             prev = n;
+        }
+
+        // add first node as neighbour of last node
+        Node last = ring.get(ring.size()-1);
+        Node first = ring.get(0);
+        if(!last.hasNeighbour(first)){
+            last.addNeighbour(first);
+        }
+
+        // last node as neighbour of first node
+        if(!first.hasNeighbour(last)){
+            first.addNeighbour(last);
         }
 
         s_graph.close();
@@ -98,85 +110,12 @@ public class Network {
             x.setNetSemaphore(netSemaphore);
         }
 
-        hamCycle();
+        // find cycle using all nodes in the graph
+        findFullCycle();
+
         printGraph();
         printRing();
     }
-
-    boolean isSafe(Node v, Node path[], int pos)
-    {
-
-        for(int i = 0; i < pos; i++){
-            if(path[i].getNodeId() == v.getNodeId()){
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /* A recursive utility function to solve hamiltonian
-       cycle problem */
-    boolean hamCycleUtil(Node path[], int pos)
-    {
-
-        if(pos == path.length){
-            if(path[path.length-1].isNeighbour(path[0])){
-                return true;
-            }else{
-                return false;
-            }
-        }
-
-        for(Node n : path[pos-1].myNeighbours){
-            // if not already in list
-            if(isSafe(n, path, pos)){
-                path[pos] = n;
-                if(hamCycleUtil(path, pos+1) == true){
-                    return true;
-                }
-                path[pos] = null;
-            }
-        }
-        return false;
-    }
-
-    /* This function solves the Hamiltonian Cycle problem using
-       Backtracking. It mainly uses hamCycleUtil() to solve the
-       problem. It returns false if there is no Hamiltonian Cycle
-       possible, otherwise return true and prints the path.
-       Please note that there may be more than one solutions,
-       this function prints one of the feasible solutions. */
-    int hamCycle()
-    {
-        int V = ring.size();
-        path = new Node[ring.size()];
-
-        for (int i = 0; i < path.length; i++)
-            path[i] = null;
-
-        /* Let us put vertex 0 as the first vertex in the path.
-           If there is a Hamiltonian Cycle, then the path can be
-           started from any point of the cycle as the graph is
-           undirected */
-        path[0] = ring.get(0);
-        if (hamCycleUtil(path, 1) == false)
-        {
-            System.out.println("\nSolution does not exist");
-            return 0;
-        }
-
-        for(Node n : path ){
-            if(n != null) {
-                System.out.print(n.getNodeId() + " ");
-            }else{
-                System.out.print("null ");
-            }
-        }
-        System.out.print("\n");
-
-        return 1;
-    }
-
 
     public void printGraph(){
         String str = "";
@@ -218,6 +157,7 @@ public class Network {
         int elect_round = -1;
         ArrayList<Integer> elect_nodes = new ArrayList<Integer>();
 
+        out_file.write("Part A\n");
 
         /*
         Code to call methods for parsing the input file, initiating the system and producing the log can be added here.
@@ -270,9 +210,53 @@ public class Network {
                     elect_nodes.clear();
 
                 }else if(elect_fail.equals("FAIL")){
-                    // see what happens
 
+                    if(first_fail){
+                        out_file.write("\nPart B\n");
+                        first_fail = false;
+                    }
 
+                    Node failed_node = node_map.get(elect_nodes.get(0)); // elect_nodes only one element
+
+                    System.out.println("Round " + (round+1) + ": Node " + failed_node.getNodeId() + " Failed");
+
+                    // remove nodes from neighbours
+                        // assuming well formed adjecent list graph were links are by directional
+                        // if node x has y as neighbour y has x as neighbour
+                    for(Node n : failed_node.myNeighbours){
+                        n.myNeighbours.remove(failed_node);
+                    }
+
+                    // remove node from ring
+                    ring.remove(failed_node);
+
+                    // find new path
+                    if( findFullCycle() == false){
+                        System.out.println("Network disconnected, can't form ring: EXITING");
+                        sc.close();
+                        break;
+                    }
+
+                    System.out.println("Building new network ring...");
+
+                    // DEBUG
+                    //printGraph();
+
+                    // set new ring as path found
+                    ring = new ArrayList<Node>(Arrays.asList(path));
+
+                    System.out.print("New ring formed: ");
+                    printCyclePath();
+
+                    // get first neighbour of failed node to start an election
+                    Node neigh_n = failed_node.myNeighbours.get(0);
+                    neigh_n.startElection();
+
+                    // clear node list of nodes failed
+                    elect_nodes.clear(); // nodes parse from FAIL line need cleared
+                    elect_just_called = true; // ensure that network does not exit early due to no messages
+                    failed_node.interrupt(); // kill failed node thread
+                    node_map.remove(failed_node.getNodeId());
                 }
 
                 // check line is not blank see if has next
@@ -300,8 +284,6 @@ public class Network {
                 }
             }
 
-            // ensure all messages have arrived ?
-
             // elect just called stops termination problem with single ELECT message in file placed in
             if (msgToDeliver.isEmpty() && elect_file_finished == true && (elect_just_called == false)) {
                 break;
@@ -309,17 +291,18 @@ public class Network {
 
             // rounds proceed here
 
-            //deliver messages
-
             deliverMessages();
+
             // time to deliver messages
             Thread.sleep(20);
 
             // Start of new round
             round++;
-            // release after delivering messages,
+
             elect_just_called = false; // reset if elect just called
-            nodesSemaphore.release(ring.size());
+
+            // release after delivering messages,
+            nodesSemaphore.release(ring.size()); // ring size change on fail
         }
 
         //break wait for all messages to be delivered
@@ -329,6 +312,7 @@ public class Network {
             n.interrupt();
         }
 
+        out_file.write("simulation completed\n");
         out_file.close();
     }
    		
@@ -336,7 +320,6 @@ public class Network {
    		/*
    		Code to parse the file can be added here. Notice that the method's descriptor must be defined.
    		*/
-
 	}
 
 	public synchronized boolean isMsgEmpty(){
@@ -371,11 +354,6 @@ public class Network {
         // only receive one message per node
         for( int node_id : msgToDeliver.keySet()){
 
-//            if(node_id == -1){
-//                // election just started so message placed in delivery to stop termination
-//                continue;
-//            }
-
             // get node sending message
             Node sending_n = node_map.get(node_id);
 
@@ -399,8 +377,79 @@ public class Network {
 		*/
 
 	}
-	
-	
+
+	// ========================== FINDING CYCLES ========================
+
+    boolean isSafe(Node v, Node path[], int pos) {
+        for(int i = 0; i < pos; i++){
+            if(path[i].getNodeId() == v.getNodeId()){
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /* A recursive utility function to solve hamiltonian
+       cycle problem */
+    boolean hamCycleUtil(Node path[], int pos) {
+        if(pos == path.length){
+            if(path[path.length-1].hasNeighbour(path[0])){
+                return true;
+            }else{
+                return false;
+            }
+        }
+
+        for(Node n : path[pos-1].myNeighbours){
+            // if not already in list
+            if(isSafe(n, path, pos)){
+                path[pos] = n;
+                if(hamCycleUtil(path, pos+1) == true){
+                    return true;
+                }
+                path[pos] = null;
+            }
+        }
+        return false;
+    }
+
+    /* This function solves the Hamiltonian Cycle problem using
+       Backtracking. It mainly uses hamCycleUtil() to solve the
+       problem. It returns false if there is no Hamiltonian Cycle
+       possible, otherwise return true and prints the path.
+       Please note that there may be more than one solutions,
+       this function prints one of the feasible solutions. */
+    boolean findFullCycle(){
+        int V = ring.size(); // if malformed file not all nodes in graph could be in ring but we should be given this
+        path = new Node[ring.size()];
+
+        for (int i = 0; i < path.length; i++) {
+            path[i] = null;
+        }
+        /* Let us put vertex 0 as the first vertex in the path.
+           If there is a Hamiltonian Cycle, then the path can be
+           started from any point of the cycle as the graph is
+           undirected */
+        path[0] = ring.get(0);
+        if (hamCycleUtil(path, 1) == false) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private void printCyclePath(){
+        for(Node n : path ){
+            if(n != null) {
+                System.out.print(n.getNodeId() + " ");
+            }else{
+                System.out.print("null ");
+            }
+        }
+        System.out.print("\n");
+    }
+
+
     public static void main(String[] args) throws IOException, InterruptedException {
         /*
         Your main must get the input file as input.

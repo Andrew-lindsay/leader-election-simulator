@@ -19,7 +19,7 @@ public class Node extends Thread {
     private int startedNum = 0;
     private int leader_node = 0;
 
-    // for synchronization
+    // for synchronization of rounds
     private Semaphore nodesSemaphore = null;
     private Semaphore netSemaphore = null;
 
@@ -29,6 +29,7 @@ public class Node extends Thread {
 	// Queues for the incoming messages
 	public List<String> incomingMsg;
 
+	// semaphores set before
 	public void setNetSemaphore(Semaphore netSemaphore) {
 		this.netSemaphore = netSemaphore;
 	}
@@ -48,16 +49,16 @@ public class Node extends Thread {
 	
 	// Basic methods for the Node class
 
+    /**
+    * Adds message to queue by network to emulate node deciding to start an election
+    **/
 	public void startElection(){
-	    // how to handle two messages at once
         incomingMsg.add("START_ELECT " +  id);
 	}
 
 	
 	public int getNodeId() {
-		/*
-		Method to get the Id of a node instance
-		*/
+		/* Method to get the Id of a node instance */
 		return id;
 	}
 			
@@ -75,7 +76,10 @@ public class Node extends Thread {
 		return myNeighbours;
 	}
 
-	public boolean isNeighbour(Node n){
+	/**
+	* Return true if supplied node is a neighbour of this node
+	*/
+	public boolean hasNeighbour(Node n){
 	    boolean inlist = false;
         for(int i = 0; i < myNeighbours.size(); i++) {
             if(myNeighbours.get(i).id == n.id ){
@@ -85,17 +89,19 @@ public class Node extends Thread {
         return inlist;
     }
 
+    /**
+	* Method to add a neighbour to a node
+	*/
 	public void addNeighbour(Node n) {
-		/*
-		Method to add a neighbour to a node
-		*/
+
         myNeighbours.add(n);
 	}
 
+    /**
+     * Method that implements the reception of an incoming message by a node
+     */
 	public void receiveMsg(String m) {
-		/*
-		Method that implements the reception of an incoming message by a node
-		*/
+
 
 		// add to incoming message list
         incomingMsg.add(m);
@@ -112,6 +118,7 @@ public class Node extends Thread {
 		// access network and add to hash map
         network.addMessage(id, m);
 	}
+
 
 	public void processMsg(){
 	    // do you need to handle all messages in queue can that even happen in a ring?
@@ -158,7 +165,7 @@ public class Node extends Thread {
         }else if(msg_type.equals("LEADER")){
             int leader_node_id = Integer.parseInt(msg_elems[1]);
             if(!isNodeLeader()) {
-                this.leader_node = id;
+                this.leader_node = leader_node_id;
                 participant = false;
                 // forward leader message
                 sendMsg("LEADER " + leader_node_id);
@@ -232,7 +239,7 @@ public class Node extends Thread {
                 // can still cause errors if  while (nodesSemaphore.availablePermits() !=0){};
             }
         }catch (InterruptedException e){
-            System.out.println("Thread "  + this.id +  " interrupted by Main Thread");
+            System.out.println("Thread "  + this.id +  " Stopped by Network Thread");
         }
 
     }
