@@ -30,7 +30,7 @@ public class Network {
     boolean elect_just_called = false;
 
     BufferedWriter out_file;
-
+    Node path[];
 
     Network(String graph, String elect) throws IOException{
 
@@ -87,10 +87,10 @@ public class Network {
         s_graph.close();
 
         // semaphore for number waiting for all threads to send
-        netSemaphore = new Semaphore(0);
+        netSemaphore = new Semaphore(0,true);
 
         // nodes go first
-        nodesSemaphore = new Semaphore(ring.size());
+        nodesSemaphore = new Semaphore(ring.size(),true);
 
         // setSemaphore for nodes
         for(Node x : ring){
@@ -98,10 +98,85 @@ public class Network {
             x.setNetSemaphore(netSemaphore);
         }
 
-
+        hamCycle();
         printGraph();
         printRing();
     }
+
+    boolean isSafe(Node v, Node path[], int pos)
+    {
+
+        for(int i = 0; i < pos; i++){
+            if(path[i].getNodeId() == v.getNodeId()){
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /* A recursive utility function to solve hamiltonian
+       cycle problem */
+    boolean hamCycleUtil(Node path[], int pos)
+    {
+
+        if(pos == path.length){
+            if(path[path.length-1].isNeighbour(path[0])){
+                return true;
+            }else{
+                return false;
+            }
+        }
+
+        for(Node n : path[pos-1].myNeighbours){
+            // if not already in list
+            if(isSafe(n, path, pos)){
+                path[pos] = n;
+                if(hamCycleUtil(path, pos+1) == true){
+                    return true;
+                }
+                path[pos] = null;
+            }
+        }
+        return false;
+    }
+
+    /* This function solves the Hamiltonian Cycle problem using
+       Backtracking. It mainly uses hamCycleUtil() to solve the
+       problem. It returns false if there is no Hamiltonian Cycle
+       possible, otherwise return true and prints the path.
+       Please note that there may be more than one solutions,
+       this function prints one of the feasible solutions. */
+    int hamCycle()
+    {
+        int V = ring.size();
+        path = new Node[ring.size()];
+
+        for (int i = 0; i < path.length; i++)
+            path[i] = null;
+
+        /* Let us put vertex 0 as the first vertex in the path.
+           If there is a Hamiltonian Cycle, then the path can be
+           started from any point of the cycle as the graph is
+           undirected */
+        path[0] = ring.get(0);
+        if (hamCycleUtil(path, 1) == false)
+        {
+            System.out.println("\nSolution does not exist");
+            return 0;
+        }
+
+        for(Node n : path ){
+            if(n != null) {
+                System.out.print(n.getNodeId() + " ");
+            }else{
+                System.out.print("null ");
+            }
+        }
+        System.out.print("\n");
+
+        return 1;
+    }
+
 
     public void printGraph(){
         String str = "";
@@ -172,7 +247,8 @@ public class Network {
 
         while(true) {
             // wait until all threads send messages
-            netSemaphore.acquire(ring.size());
+            netSemaphore.acquire(ring.size());  // nodes have all sent messages and called netsemaphore release
+
             // System.out.println("Round " + round + " all messages received now sending messages");
 
             // parse elect file here
@@ -224,18 +300,20 @@ public class Network {
                 }
             }
 
+            // ensure all messages have arrived ?
+
             // elect just called stops termination problem with single ELECT message in file placed in
-            if(msgToDeliver.isEmpty() && elect_file_finished == true && (elect_just_called == false)){
+            if (msgToDeliver.isEmpty() && elect_file_finished == true && (elect_just_called == false)) {
                 break;
             }
 
             // rounds proceed here
-            Thread.sleep(1000);
 
             //deliver messages
-            // TODO: complete deliver messages
 
             deliverMessages();
+            // time to deliver messages
+            Thread.sleep(20);
 
             // Start of new round
             round++;
@@ -260,6 +338,10 @@ public class Network {
    		*/
 
 	}
+
+	public synchronized boolean isMsgEmpty(){
+        return false;
+    }
 	
 	public synchronized void addMessage(int id, String m) {
 		/*

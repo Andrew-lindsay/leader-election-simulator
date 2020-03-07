@@ -211,23 +211,25 @@ public class Node extends Thread {
                 // could get multiple messages from diff neighbour nodes can only send one tho ?
                 // if you get multiple messages wait until next round to handle them
 
-                nodesSemaphore.acquire();
+                nodesSemaphore.acquire(); // can reach here directly after acquire again
+
+                // sleep code
+//                try {
+//                    Thread.sleep(20);
+//                } catch (InterruptedException e) {
+//                    e.printStackTrace();
+//                }
 
                 // process messaged
                 processMsg();
 
-                //network.addMessage(id,"THREAD: " + id);
-
-                try {
-                    Thread.sleep(200);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-
                 //System.out.println("Messages sent for thread:  " + id + " for round " + startedNum);
-                startedNum++;
+                startedNum++; //round count
 
                 netSemaphore.release();
+
+                // spin until nodesSemaphore zero still can cause bugs
+                // can still cause errors if  while (nodesSemaphore.availablePermits() !=0){};
             }
         }catch (InterruptedException e){
             System.out.println("Thread "  + this.id +  " interrupted by Main Thread");
