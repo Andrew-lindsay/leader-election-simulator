@@ -40,7 +40,7 @@ public class Node extends Thread {
 
 	public Node(int id, Network network, BufferedWriter br){
 		this.id = id;
-		this.network = network; // get network in thread ?
+		this.network = network;
 		this.outfile_writer = br;
 
 		myNeighbours = new ArrayList<Node>();
@@ -51,21 +51,23 @@ public class Node extends Thread {
 
     /**
     * Adds message to queue by network to emulate node deciding to start an election
-    **/
+    */
 	public void startElection(){
         incomingMsg.add("START_ELECT " +  id);
 	}
 
-	
+
+    /**
+     *  Method to get the Id of a node instance
+     */
 	public int getNodeId() {
-		/* Method to get the Id of a node instance */
 		return id;
 	}
-			
+
+    /**
+    Method to return true if the node is currently a leader
+    */
 	public boolean isNodeLeader() {
-		/*
-		Method to return true if the node is currently a leader
-		*/
 		return leader;
 	}
 
@@ -93,7 +95,6 @@ public class Node extends Thread {
 	* Method to add a neighbour to a node
 	*/
 	public void addNeighbour(Node n) {
-
         myNeighbours.add(n);
 	}
 
@@ -101,25 +102,29 @@ public class Node extends Thread {
      * Method that implements the reception of an incoming message by a node
      */
 	public void receiveMsg(String m) {
-
-
 		// add to incoming message list
         incomingMsg.add(m);
 	}
 
-	public void sendMsg(String m) {
-		/*
-		Method that implements the sending of a message by a node. 
-		The message must be delivered to its recipients through the network.
-		This method need only implement the logic of the network receiving an outgoing message from a node.
-		The remainder of the logic will be implemented in the network class.
-		*/
+    /*
+    Method that implements the sending of a message by a node.
+    The message must be delivered to its recipients through the network.
+    This method need only implement the logic of the network receiving an outgoing message from a node.
+    The remainder of the logic will be implemented in the network class.
+    */
+    public void sendMsg(String m) {
 
 		// access network and add to hash map
         network.addMessage(id, m);
 	}
 
-
+	/**
+     *  Handles the different types of messages a Node could receive
+     *      - ELECT
+     *      - FORWARD
+     *      - LEADER
+     *  Sends messages triggered by the processing of a message to the network to be delivered.
+     */
 	public void processMsg(){
 	    // do you need to handle all messages in queue can that even happen in a ring?
 
@@ -129,7 +134,6 @@ public class Node extends Thread {
         }
 
         String msg  = incomingMsg.remove(0); // inefficient use queue
-        //System.out.println(msg);
 
         // parse msg
         String msg_elems[] = msg.split(" ");
@@ -199,49 +203,32 @@ public class Node extends Thread {
                 // if other message in queue process it ?
             }
 
-        }else if(msg_type.equals("START_ELECT")){
+        }else if(msg_type.equals("START_ELECT")){ // pseudo message to indicate that node needs to start election
             participant = true;
             sendMsg("ELECT " + this.id);
         }
         else{
-            System.out.println("MALFORMED MESSAGE");
+            System.out.println("MALFORMED MESSAGE"); // something when wrong
         }
     }
 
     @Override
     public void run(){
-
 	    try {
-            // if no message proceed to latch straight away
             while (true) {
-                // logic for handling incoming messages
-                // could get multiple messages from diff neighbour nodes can only send one tho ?
-                // if you get multiple messages wait until next round to handle them
-
                 nodesSemaphore.acquire(); // can reach here directly after acquire again
-
-                // sleep code
-//                try {
-//                    Thread.sleep(20);
-//                } catch (InterruptedException e) {
-//                    e.printStackTrace();
-//                }
 
                 // process messaged
                 processMsg();
 
-                //System.out.println("Messages sent for thread:  " + id + " for round " + startedNum);
-                startedNum++; //round count
+                startedNum++; // round count
 
+                // tell Network that have finished sending messages
                 netSemaphore.release();
-
-                // spin until nodesSemaphore zero still can cause bugs
-                // can still cause errors if  while (nodesSemaphore.availablePermits() !=0){};
             }
         }catch (InterruptedException e){
             System.out.println("Thread "  + this.id +  " Stopped by Network Thread");
         }
-
     }
 
 }

@@ -15,11 +15,11 @@ Class to simulate the network. System design directions:
 */
 public class Network {
 
-	private static List<Node> nodes;
+	private static List<Node> nodes; //
 	private static HashMap<Integer, Node> node_map;
-	private static ArrayList<Node> ring;
-    private Semaphore netSemaphore;
-    private Semaphore nodesSemaphore;
+	private static ArrayList<Node> ring; // represents the ring formed
+    private Semaphore netSemaphore; // lock to tell network when all threads have sent messages
+    private Semaphore nodesSemaphore; // lock to tell threads when all messages of been delivered
 
 	private int round;
 	private int period = 20;
@@ -29,13 +29,17 @@ public class Network {
     boolean elect_just_called = false;
     boolean first_fail = true;
 
+    // handles log.txt
     BufferedWriter out_file;
+
+    // stores the path of the new cycle discovered before replacing ring
     Node path[];
 
+    /**
+     * Constructor parses the graph file creating the graph in nodes_map and storing the ring
+     * specified by the file in the Array list ring.
+    **/
     Network(String graph, String elect) throws IOException{
-
-        // build ring here as well
-        // Node have a next pointer ?
 
         // initialising setup
         nodes = new ArrayList<Node>();
@@ -57,8 +61,6 @@ public class Network {
             int node_id = Integer.parseInt(node_line[0]);
             Node n;
 
-            //System.out.println(node_id);
-
             // if not already seen node create node and add to map
             n = getNodeInMap(node_id);
 
@@ -77,6 +79,10 @@ public class Network {
             if(prev != null){
                 if(!n.hasNeighbour(prev)){
                     n.addNeighbour(prev);
+                }
+
+                if(!prev.hasNeighbour(n)){
+                    prev.addNeighbour(n);
                 }
             }
 
@@ -113,10 +119,14 @@ public class Network {
         // find cycle using all nodes in the graph
         findFullCycle();
 
+        // DEBUG
         printGraph();
         printRing();
     }
 
+    /**
+     * Debug function for printing the graph
+    * */
     public void printGraph(){
         String str = "";
         for(Node n : node_map.values()){
@@ -128,6 +138,9 @@ public class Network {
         }
     }
 
+    /**
+     * Debug function for printing ring
+     */
     public void printRing(){
         for(Node n : ring){
             System.out.print(n.getNodeId());
@@ -136,7 +149,10 @@ public class Network {
         System.out.print('\n');
     }
 
-    // creates new node if not in map
+    /**
+     * Creates new node if not in map returning new node or node if already in map.
+     *      - used in parsing the graph from the graph file
+     * */
     public Node getNodeInMap(int node_id){
         Node n;
         if(!node_map.containsKey(node_id)){
@@ -148,6 +164,15 @@ public class Network {
         return n;
     }
 
+    /**
+     * Runs the simulation of the network
+     *  - Reads the elect or fail file for an event
+     *  - Starts all the Node threads running and waiting for there messages.
+     *  - Delivers message received from nodes, using function deliverMessages()
+     *  - Increments rounds
+     *  - Terminates simulation if event file has finished and no messages have been sent in a round
+     *      and election did not just start
+     */
 	public void NetSimulator()  throws IOException, InterruptedException {
         msgToDeliver = new HashMap<Integer, String>();
         round = 0;
@@ -158,10 +183,6 @@ public class Network {
         ArrayList<Integer> elect_nodes = new ArrayList<Integer>();
 
         out_file.write("Part A\n");
-
-        /*
-        Code to call methods for parsing the input file, initiating the system and producing the log can be added here.
-        */
 
         // start all nodes
         for(Node node : ring){
@@ -189,26 +210,20 @@ public class Network {
             // wait until all threads send messages
             netSemaphore.acquire(ring.size());  // nodes have all sent messages and called netsemaphore release
 
-            // System.out.println("Round " + round + " all messages received now sending messages");
-
-            // parse elect file here
-
             // check at start of new round if anything needs to be elected
             if(round == (elect_round-1)){
                 // initialise election for a nodes
 
                 if(elect_fail.equals("ELECT")){
-
+                    // start election for all nodes in the election array
                     for(int node_id : elect_nodes){
                         Node n = node_map.get(node_id);
                         n.startElection();
                         elect_just_called = true;
                         System.out.println("Initiation of election; Round: " + elect_round + " Node: " + node_id);
                     }
-
-                    // clear nodes
+                    // reset election node for next line to be parsed
                     elect_nodes.clear();
-
                 }else if(elect_fail.equals("FAIL")){
 
                     if(first_fail){
@@ -216,7 +231,8 @@ public class Network {
                         first_fail = false;
                     }
 
-                    Node failed_node = node_map.get(elect_nodes.get(0)); // elect_nodes only one element
+                    // single neighbour node contacted by failure detection system so starts election
+                    Node failed_node = node_map.get(elect_nodes.get(0));
 
                     System.out.println("Round " + (round+1) + ": Node " + failed_node.getNodeId() + " Failed");
 
@@ -227,23 +243,22 @@ public class Network {
                         n.myNeighbours.remove(failed_node);
                     }
 
+                    // remove node from ring (needs to happen before trying to find a new cycle)
                     ring.remove(failed_node);
 
                     // find new path
                     if( findFullCycle() == false){
                         System.out.println("Network disconnected, can't form ring: EXITING");
                         sc.close();
+                        failed_node.interrupt(); // kill failed node thread
                         node_map.remove(failed_node.getNodeId());
                         break;
                     }
 
-                    // remove node from ring
-
-
                     System.out.println("Building new network ring...");
 
                     // DEBUG
-                    //printGraph();
+                    printGraph();
 
                     // set new ring as path found
                     ring = new ArrayList<Node>(Arrays.asList(path));
@@ -268,6 +283,7 @@ public class Network {
                     // check if line is empty
                     line_elect = next_line.split(" ");
 
+                    // some error checking of file line
                     if (line_elect.length < 3) {
                         System.out.println("ERROR: malformed ELECT line: " + next_line);
                     }
@@ -275,6 +291,7 @@ public class Network {
                     elect_fail = line_elect[0];
                     elect_round = Integer.parseInt(line_elect[1]);
 
+                    // place all node to elect in that round in an array
                     for (int i = 2; i < line_elect.length; i++) {
                         elect_nodes.add(Integer.parseInt(line_elect[i]));
                     }
@@ -292,12 +309,10 @@ public class Network {
                 break;
             }
 
-            // rounds proceed here
-
             deliverMessages();
 
             // time to deliver messages
-            Thread.sleep(20);
+            Thread.sleep(period);
 
             // Start of new round
             round++;
@@ -311,6 +326,7 @@ public class Network {
         //break wait for all messages to be delivered
         System.out.println("Main thread terminated");
 
+        // shutdown all threads
         for (Node n : ring){
             n.interrupt();
         }
@@ -318,41 +334,26 @@ public class Network {
         out_file.write("simulation completed\n");
         out_file.close();
     }
-   		
-   	private void parseFile(String fileName) throws IOException {
-   		/*
-   		Code to parse the file can be added here. Notice that the method's descriptor must be defined.
-   		*/
-	}
 
-	public synchronized boolean isMsgEmpty(){
-        return false;
-    }
-	
-	public synchronized void addMessage(int id, String m) {
-		/*
-		At each round, the network collects all the messages that the nodes want to send to their neighbours. 
-		Implement this logic here.
-		*/
-
+    /**
+     * At each round, the network collects all the messages that the nodes want to send to their neighbours.
+     * Implement this logic here.
+     */
+    public synchronized void addMessage(int id, String m) {
         msgToDeliver.put(id,m);
 	}
-	
-	public synchronized void deliverMessages() {
-		/*
-		At each round, the network delivers all the messages that it has collected from the nodes.
-		Implement this logic here.
-		The network must ensure that a node can send only to its neighbours, one message per round per neighbour.
-		*/
 
-		// how to know when to deliver messages
-        // wait for node to send to neighbours ? (bad)
+    /**
+     * At each round, the network delivers all the messages that it has collected from the nodes.
+     * Ensures that a node can send only to its neighbours in the ring, one message per round per neighbour
+     * as we are using a hash map.
+     *
+     *  Loops over node IDs in msgToDeliver hash map sending message to ring neighbour of the Node id.
+     */
+    public synchronized void deliverMessages() {
 
         // send to nodes msg to it's neighbour in the ring
             // enforces sending only to neighbour
-
-
-        //ArrayList<Integer> removeList = new ArrayList<Integer>(); // if needed
 
         // only receive one message per node
         for( int node_id : msgToDeliver.keySet()){
@@ -373,17 +374,23 @@ public class Network {
         }
         msgToDeliver.clear(); // clear list of messages after sending them
 	}
-		
+
+    /**
+     * Method to inform the neighbours of a failed node about the event.
+     * */
 	public synchronized void informNodeFailure(int id) {
-		/*
-		Method to inform the neighbours of a failed node about the event.
-		*/
 
 	}
 
-	// ========================== FINDING CYCLES ========================
+    /**
+     * Code to parse the file can be added here. Notice that the method's descriptor must be defined.
+     */
+    private void parseFile(String fileName) throws IOException {
 
-    boolean isSafe(Node v, Node path[], int pos) {
+    }
+
+    // ========================== FINDING CYCLES ========================
+    boolean isSafeToAdd(Node v, Node path[], int pos) {
         for(int i = 0; i < pos; i++){
             if(path[i].getNodeId() == v.getNodeId()){
                 return false;
@@ -392,9 +399,11 @@ public class Network {
         return true;
     }
 
-    /* A recursive utility function to solve hamiltonian
-       cycle problem */
-    boolean hamCycleUtil(Node path[], int pos) {
+    /**
+     * recursive descent down the graph with backtracking used find cycle
+     * */
+    boolean cycleUtil(Node path[], int pos) {
+        // base case if last node is path has first node as neighbour return true
         if(pos == path.length){
             if(path[path.length-1].hasNeighbour(path[0])){
                 return true;
@@ -403,44 +412,40 @@ public class Network {
             }
         }
 
+        // search over all neighbours to test for a cycle
         for(Node n : path[pos-1].myNeighbours){
-            // if not already in list
-            if(isSafe(n, path, pos)){
+            // if not already in list add
+            if(isSafeToAdd(n, path, pos)){
                 path[pos] = n;
-                if(hamCycleUtil(path, pos+1) == true){
+                if(cycleUtil(path, pos+1) == true){
                     return true;
                 }
-                path[pos] = null;
+                path[pos] = null; // remove node from path as it failed move on to next neighbour
             }
         }
         return false;
     }
 
-    /* This function solves the Hamiltonian Cycle problem using
-       Backtracking. It mainly uses hamCycleUtil() to solve the
-       problem. It returns false if there is no Hamiltonian Cycle
-       possible, otherwise return true and prints the path.
-       Please note that there may be more than one solutions,
-       this function prints one of the feasible solutions. */
+    /**
+     * Function tries to find a hamiltonian cycle in the graph
+     */
     boolean findFullCycle(){
-        int V = ring.size(); // if malformed file not all nodes in graph could be in ring but we should be given this
+        // if malformed file not all nodes in graph could be in ring but we should be given this
+        int V = ring.size();
         path = new Node[ring.size()];
 
         for (int i = 0; i < path.length; i++) {
             path[i] = null;
         }
-        /* Let us put vertex 0 as the first vertex in the path.
-           If there is a Hamiltonian Cycle, then the path can be
-           started from any point of the cycle as the graph is
-           undirected */
-        path[0] = ring.get(0);
-        if (hamCycleUtil(path, 1) == false) {
-            return false;
-        }
 
-        return true;
+        path[0] = ring.get(0);
+
+        return cycleUtil(path, 1);
     }
 
+    /**
+     * Prints cycle found in graph
+     * */
     private void printCyclePath(){
         for(Node n : path ){
             if(n != null) {
@@ -452,11 +457,12 @@ public class Network {
         System.out.print("\n");
     }
 
+    // ========================== END OF CYCLE CODE ========================
 
+    /*
+    *  Checks args and creates network the runs the simulation
+    * */
     public static void main(String[] args) throws IOException, InterruptedException {
-        /*
-        Your main must get the input file as input.
-        */
 
         if(args.length < 2){
             System.out.println("Please provide files!");
@@ -464,14 +470,20 @@ public class Network {
             System.out.format("arg[0]: %s, arg[1]: %s\n", args[0], args[1]);
         }
 
-        // parse ds_elect
+        // get args
         String ds_graph = args[0];
         String ds_elect_fail = args[1];
 
+        //check files exist
+        File graph = new File(ds_graph);
+        File e_f = new File(ds_elect_fail);
+        if(!graph.exists()){ System.out.println("ERROR: file " + ds_graph + " does not exist!");return;}
+        if(!e_f.exists()){ System.out.println("ERROR: file " + ds_elect_fail + " does not exist!");return;}
+
+        // construct the network from graph file
         Network net = new Network(ds_graph, ds_elect_fail);
 
         // start simulator
          net.NetSimulator();
-
     }
 }
