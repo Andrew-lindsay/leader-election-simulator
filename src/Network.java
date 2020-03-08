@@ -120,8 +120,8 @@ public class Network {
         findFullCycle();
 
         // DEBUG
-        printGraph();
-        printRing();
+        //printGraph();
+        //printRing();
     }
 
     /**
@@ -258,7 +258,7 @@ public class Network {
                     System.out.println("Building new network ring...");
 
                     // DEBUG
-                    printGraph();
+                    //printGraph();
 
                     // set new ring as path found
                     ring = new ArrayList<Node>(Arrays.asList(path));
@@ -467,7 +467,7 @@ public class Network {
         if(args.length < 2){
             System.out.println("Please provide files!");
         }else{
-            System.out.format("arg[0]: %s, arg[1]: %s\n", args[0], args[1]);
+            //System.out.format("arg[0]: %s, arg[1]: %s\n", args[0], args[1]);
         }
 
         // get args
